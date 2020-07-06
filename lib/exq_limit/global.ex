@@ -1,6 +1,8 @@
 defmodule ExqLimit.Global do
+  require Logger
   alias ExqLimit.Redis.Script
   require ExqLimit.Redis.Script
+
   @behaviour Exq.Dequeue.Behaviour
 
   Script.compile(:rebalance)
@@ -19,22 +21,28 @@ defmodule ExqLimit.Global do
               queue: nil,
               interval: nil,
               cutoff_threshold: nil,
+              last_synced: nil,
               mode: :rebalance
   end
 
   @impl true
-  def init(%{queue: queue}, %{limit: limit}) do
-    {:ok, redis} = Redix.start_link()
-    node_id = Exq.Support.Config.node_identifier().node_id()
-    interval = 10_000
-    missed_heartbeats_allowed = 1
+  def init(%{queue: queue}, options) do
+    interval = Keyword.get(options, :interval, 20_000)
+    missed_heartbeats_allowed = Keyword.get(options, :missed_heartbeats_allowed, 5)
 
     state = %State{
       interval: interval,
       cutoff_threshold: interval / 1000 * (missed_heartbeats_allowed + 1),
-      limit: limit,
-      redis: redis,
-      node_id: node_id,
+      limit: Keyword.fetch!(options, :limit),
+      redis:
+        Keyword.get_lazy(options, :redis, fn ->
+          Exq.Support.Config.get(:name)
+          |> Exq.Support.Opts.redis_client_name()
+        end),
+      node_id:
+        Keyword.get_lazy(options, :node_id, fn ->
+          Exq.Support.Config.node_identifier().node_id()
+        end),
       queue: queue
     }
 
@@ -63,21 +71,28 @@ defmodule ExqLimit.Global do
 
   defp sync(state) do
     IO.inspect({state.mode, state.running, state.current, state.allowed})
-    prefix = "exq:exq_limit:#{state.queue}:"
-    time = DateTime.to_unix(DateTime.utc_now(), :millisecond) / 1000
+    now = System.system_time(:millisecond)
 
-    case state.mode do
-      :rebalance ->
-        rebalance(state, prefix, time)
+    if state.last_synced && now - state.last_synced < state.interval do
+      state
+    else
+      prefix = "exq:exq_limit:#{state.queue}:"
+      time = now / 1000
+      state = %{state | last_synced: now}
 
-      :drain ->
-        drain(state, prefix, time)
+      case state.mode do
+        :rebalance ->
+          rebalance(state, prefix, time)
 
-      :fill ->
-        fill(state, prefix, time)
+        :drain ->
+          drain(state, prefix, time)
 
-      :heartbeat ->
-        heartbeat(state, prefix, time)
+        :fill ->
+          fill(state, prefix, time)
+
+        :heartbeat ->
+          heartbeat(state, prefix, time)
+      end
     end
   end
 
@@ -95,6 +110,13 @@ defmodule ExqLimit.Global do
         rebalance(state, prefix, time)
 
       {:ok, 1} ->
+        state
+
+      error ->
+        Logger.error(
+          "Failed to run hearbeat script. Unexpected error from redis: #{inspect(error)}"
+        )
+
         state
     end
   end
@@ -115,6 +137,10 @@ defmodule ExqLimit.Global do
 
       {:ok, [allowed, current]} ->
         %{state | allowed: allowed, current: current, mode: next_mode(allowed, current)}
+
+      error ->
+        Logger.error("Failed to run fill script. Unexpected error from redis: #{inspect(error)}")
+        state
     end
   end
 
@@ -137,6 +163,10 @@ defmodule ExqLimit.Global do
       {:ok, 1} ->
         current = state.current - amount
         %{state | current: current, mode: next_mode(state.allowed, current)}
+
+      error ->
+        Logger.error("Failed to run drain script. Unexpected error from redis: #{inspect(error)}")
+        state
     end
   end
 
@@ -160,6 +190,13 @@ defmodule ExqLimit.Global do
             current: current,
             mode: next_mode(allowed, current)
         }
+
+      error ->
+        Logger.error(
+          "Failed to run rebalance script. Unexpected error from redis: #{inspect(error)}"
+        )
+
+        state
     end
   end
 

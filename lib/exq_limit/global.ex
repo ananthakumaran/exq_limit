@@ -213,7 +213,7 @@ defmodule ExqLimit.Global do
     end
   end
 
-  defp clear(state, prefix, time) do
+  defp clear(state, prefix, _time) do
     case Script.eval!(
            state.redis,
            @clear,

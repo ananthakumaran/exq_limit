@@ -70,7 +70,6 @@ defmodule ExqLimit.Global do
   def failed(state), do: {:ok, %{state | running: state.running - 1}}
 
   defp sync(state) do
-    IO.inspect({state.mode, state.running, state.current, state.allowed})
     now = System.system_time(:millisecond)
 
     if state.last_synced && now - state.last_synced < state.interval do
@@ -145,28 +144,35 @@ defmodule ExqLimit.Global do
   end
 
   defp drain(state, prefix, time) do
-    amount = Enum.max([state.current - state.allowed, state.running - state.allowed])
+    amount = Enum.min([state.current - state.allowed, state.current - state.running])
 
-    case Script.eval!(
-           state.redis,
-           @drain,
-           [
-             prefix <> "version",
-             prefix <> "allocation",
-             prefix <> "heartbeat"
-           ],
-           [state.node_id, state.version, time, time - state.cutoff_threshold, amount]
-         ) do
-      {:ok, 0} ->
-        rebalance(state, prefix, time)
+    if amount == 0 do
+      heartbeat(state, prefix, time)
+    else
+      case Script.eval!(
+             state.redis,
+             @drain,
+             [
+               prefix <> "version",
+               prefix <> "allocation",
+               prefix <> "heartbeat"
+             ],
+             [state.node_id, state.version, time, time - state.cutoff_threshold, amount]
+           ) do
+        {:ok, 0} ->
+          rebalance(state, prefix, time)
 
-      {:ok, 1} ->
-        current = state.current - amount
-        %{state | current: current, mode: next_mode(state.allowed, current)}
+        {:ok, 1} ->
+          current = state.current - amount
+          %{state | current: current, mode: next_mode(state.allowed, current)}
 
-      error ->
-        Logger.error("Failed to run drain script. Unexpected error from redis: #{inspect(error)}")
-        state
+        error ->
+          Logger.error(
+            "Failed to run drain script. Unexpected error from redis: #{inspect(error)}"
+          )
+
+          state
+      end
     end
   end
 

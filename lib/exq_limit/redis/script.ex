@@ -1,4 +1,6 @@
 defmodule ExqLimit.Redis.Script do
+  require Logger
+
   defmacro compile(name) do
     path =
       Path.expand(
@@ -14,11 +16,13 @@ defmodule ExqLimit.Redis.Script do
 
     quote do
       Module.put_attribute(__MODULE__, :external_resource, unquote(path))
-      Module.put_attribute(__MODULE__, unquote(name), unquote({hash, source}))
+      Module.put_attribute(__MODULE__, unquote(name), unquote(Macro.escape({name, hash, source})))
     end
   end
 
-  def eval!(redis, {hash, source}, keys, args) do
+  def eval!(redis, {name, hash, source}, keys, args) do
+    Logger.debug(fn -> "eval script " <> inspect({name, keys, args}) end)
+
     case Redix.command(redis, ["EVALSHA", hash, length(keys)] ++ keys ++ args) do
       {:error, %Redix.Error{message: "NOSCRIPT" <> _}} ->
         Redix.command(redis, ["EVAL", source, length(keys)] ++ keys ++ args)

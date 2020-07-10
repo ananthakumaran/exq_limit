@@ -24,7 +24,7 @@ defmodule ExqLimit.MixProject do
 
   defp deps do
     [
-      {:exq, path: "../exq"},
+      {:exq, github: "akira/exq", branch: "dequeue_controller"},
       {:redix, ">= 0.9.0"},
       {:stream_data, "~> 0.5", only: [:test, :dev]}
     ]

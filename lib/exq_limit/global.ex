@@ -9,6 +9,7 @@ defmodule ExqLimit.Global do
   Script.compile(:drain)
   Script.compile(:fill)
   Script.compile(:heartbeat)
+  Script.compile(:clear)
 
   defmodule State do
     defstruct limit: nil,
@@ -52,7 +53,10 @@ defmodule ExqLimit.Global do
   end
 
   @impl true
-  def stop(_), do: :ok
+  def stop(state) do
+    sync(%{state | mode: :clear})
+    :ok
+  end
 
   @impl true
   def available?(state) do
@@ -72,7 +76,7 @@ defmodule ExqLimit.Global do
   defp sync(state) do
     now = System.system_time(:millisecond)
 
-    if state.last_synced && now - state.last_synced < state.interval do
+    if state.mode != :clear && state.last_synced && now - state.last_synced < state.interval do
       state
     else
       prefix = "exq:exq_limit:#{state.queue}:"
@@ -80,6 +84,9 @@ defmodule ExqLimit.Global do
       state = %{state | last_synced: now}
 
       case state.mode do
+        :clear ->
+          clear(state, prefix, time)
+
         :rebalance ->
           rebalance(state, prefix, time)
 
@@ -201,6 +208,27 @@ defmodule ExqLimit.Global do
         Logger.error(
           "Failed to run rebalance script. Unexpected error from redis: #{inspect(error)}"
         )
+
+        state
+    end
+  end
+
+  defp clear(state, prefix, time) do
+    case Script.eval!(
+           state.redis,
+           @clear,
+           [
+             prefix <> "version",
+             prefix <> "allocation",
+             prefix <> "heartbeat"
+           ],
+           [state.node_id]
+         ) do
+      {:ok, 1} ->
+        state
+
+      error ->
+        Logger.error("Failed to run clear script. Unexpected error from redis: #{inspect(error)}")
 
         state
     end

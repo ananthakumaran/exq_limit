@@ -1,36 +1,15 @@
-defmodule NodeSimulator.Helper do
-  defmacro weight(spec) do
-    {spec, _} = Code.eval_quoted(spec)
-
-    list =
-      Enum.map(spec, fn {command, times} ->
-        Stream.cycle([command])
-        |> Enum.take(times)
-      end)
-      |> Enum.concat()
-
-    quote do
-      unquote(list)
-    end
-  end
-
-  @max_nodes 20
-  @nodes 1..@max_nodes |> Enum.map(&"node_#{&1}")
-
-  def unknown_node(%{nodes: nodes}), do: Enum.random(@nodes -- Map.keys(nodes))
-  def known_node(%{nodes: nodes}), do: Enum.random(Map.keys(nodes))
-  def available_node(%{available_nodes: nodes}), do: Enum.random(Map.keys(nodes))
-  def running_node(%{running: nodes}), do: Enum.random(Map.keys(nodes))
-end
-
 defmodule NodeSimulator do
   require Logger
-  require NodeSimulator.Helper
-  import NodeSimulator.Helper
 
   defmodule State do
-    defstruct nodes: %{}, limit: 10, available_nodes: [], running: %{}
+    defstruct all_nodes: [], nodes: %{}, limit: 0, available_nodes: [], running: %{}
   end
+
+  defp unknown_node(%{nodes: nodes, all_nodes: all_nodes}),
+    do: Enum.random(all_nodes -- Map.keys(nodes))
+
+  defp known_node(%{nodes: nodes}), do: Enum.random(Map.keys(nodes))
+  defp running_node(%{running: nodes}), do: Enum.random(Map.keys(nodes))
 
   defp trace_apply(module, function, args) do
     result = apply(module, function, args)
@@ -141,15 +120,34 @@ defmodule NodeSimulator do
   end
 
   def sleep(state, _module) do
-    Process.sleep(60)
+    Process.sleep(Enum.random(1..50))
     state
   end
 
-  def run(module, invariant) do
-    {:ok, _redis} = Redix.start_link(name: TestRedis)
+  defp select_random_command(weights) do
+    case Process.get(weights) do
+      nil ->
+        list =
+          Enum.map(weights, fn {command, times} ->
+            Stream.cycle([command])
+            |> Enum.take(times)
+          end)
+          |> Enum.concat()
 
-    Enum.reduce(1..1000, %State{}, fn _, state ->
-      command = Enum.random(next_command(state))
+        Process.put(weights, list)
+        list
+
+      list ->
+        list
+    end
+    |> Enum.random()
+  end
+
+  def run(module, %{limit: limit, times: times, all_nodes: all_nodes}, invariant) do
+    {:ok, "OK"} = Redix.command(TestRedis, ["FLUSHALL"])
+
+    Enum.reduce(1..times, %State{all_nodes: all_nodes, limit: limit}, fn _, state ->
+      command = select_random_command(next_command(state))
       state = apply(__MODULE__, command, [state, module])
       invariant.(state)
       state
@@ -157,36 +155,25 @@ defmodule NodeSimulator do
   end
 
   def next_command(%State{nodes: nodes}) when map_size(nodes) == 0 do
-    weight(%{start_node: 1})
+    %{start_node: 1}
   end
 
-  def next_command(%State{nodes: nodes}) when map_size(nodes) == 10 do
-    weight(%{
-      stop_node: 3,
-      get_available: 10,
-      sleep: 5
-    })
-  end
+  def next_command(%State{nodes: nodes, limit: limit, all_nodes: all_nodes, running: running}) do
+    start_node =
+      if length(all_nodes) == map_size(nodes) || limit == map_size(nodes), do: 0, else: 3
 
-  def next_command(%State{running: running}) when map_size(running) > 0 do
-    weight(%{
-      start_node: 3,
+    stop_node = if map_size(nodes) > 0, do: 3, else: 0
+    finish_job = if map_size(running) > 0, do: 5, else: 0
+    fail_job = if map_size(running) > 0, do: 5, else: 0
+
+    %{
+      start_node: start_node,
+      stop_node: stop_node,
       start_job: 5,
-      finish_job: 5,
-      fail_job: 5,
-      stop_node: 2,
+      finish_job: finish_job,
+      fail_job: fail_job,
       get_available: 5,
       sleep: 5
-    })
-  end
-
-  def next_command(_) do
-    weight(%{
-      start_node: 3,
-      start_job: 5,
-      stop_node: 2,
-      get_available: 5,
-      sleep: 5
-    })
+    }
   end
 end

@@ -25,7 +25,8 @@ defmodule ExqLimit.MixProject do
   defp deps do
     [
       {:exq, path: "../exq"},
-      {:redix, ">= 0.9.0"}
+      {:redix, ">= 0.9.0"},
+      {:stream_data, "~> 0.5", only: [:test, :dev]}
     ]
   end
 end

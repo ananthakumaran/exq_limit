@@ -1,14 +1,107 @@
 defmodule ExqLimit.GlobalTest do
-  alias ExqLimit.Global
-  use ExUnit.Case
+  use ExUnit.Case, async: false
   use ExUnitProperties
+  alias ExqLimit.Global
 
   setup do
-    {:ok, _redis} = Redix.start_link(name: TestRedis)
+    start_supervised!({Redix, name: TestRedis})
+    {:ok, "OK"} = Redix.command(TestRedis, ["FLUSHALL"])
     :ok
   end
 
-  @tag timeout: 120_000
+  test "life cycle" do
+    queue_info = %{queue: "hard"}
+    options = [limit: 10, interval: 50, missed_heartbeats_allowed: 5]
+    {:ok, n1} = Global.init(queue_info, options ++ [node_id: "n1"])
+    assert n1.current == 10
+    assert n1.allowed == 10
+
+    {:ok, n2} = Global.init(queue_info, options ++ [node_id: "n2"])
+    assert n2.current == 0
+    assert n2.allowed == 5
+
+    Process.sleep(55)
+    assert {:ok, true, n1} = Global.available?(n1)
+    assert n1.mode == :drain
+    assert n1.current == 10
+    assert n1.allowed == 5
+
+    Process.sleep(55)
+    assert {:ok, true, n1} = Global.available?(n1)
+    assert n1.mode == :heartbeat
+    assert n1.current == 5
+    assert n1.allowed == 5
+
+    assert {:ok, true, n2} = Global.available?(n2)
+    assert n2.mode == :heartbeat
+    assert n2.current == 5
+    assert n2.allowed == 5
+
+    n1 =
+      Enum.reduce(1..5, n1, fn _, n1 ->
+        assert {:ok, true, n1} = Global.available?(n1)
+        assert {:ok, n1} = Global.dispatched(n1)
+        n1
+      end)
+
+    assert {:ok, false, n1} = Global.available?(n1)
+
+    assert :ok = Global.stop(n2)
+
+    Process.sleep(55)
+    assert {:ok, true, n1} = Global.available?(n1)
+    assert n1.mode == :heartbeat
+    assert n1.current == 10
+    assert n1.allowed == 10
+    assert n1.running == 5
+
+    n1 =
+      Enum.reduce(1..5, n1, fn _, n1 ->
+        assert {:ok, n1} = Global.processed(n1)
+        n1
+      end)
+
+    assert {:ok, true, n1} = Global.available?(n1)
+    assert n1.current == 10
+    assert n1.allowed == 10
+    assert n1.running == 0
+
+    {:ok, n2} = Global.init(queue_info, options ++ [node_id: "n2"])
+    assert n2.current == 0
+    assert n2.allowed == 5
+
+    Process.sleep(100)
+    assert {:ok, false, n2} = Global.available?(n2)
+
+    Process.sleep(100)
+    assert {:ok, false, n2} = Global.available?(n2)
+
+    Process.sleep(150)
+    # n1 times out
+    assert {:ok, true, n2} = Global.available?(n2)
+    assert n2.current == 10
+    assert n2.allowed == 10
+
+    assert {:ok, false, n1} = Global.available?(n1)
+    assert n1.current == 0
+    assert n1.allowed == 5
+
+    Process.sleep(60)
+    assert {:ok, true, n2} = Global.available?(n2)
+    assert n2.current == 10
+    assert n2.allowed == 5
+
+    Process.sleep(50)
+    assert {:ok, true, n2} = Global.available?(n2)
+    assert n2.current == 5
+    assert n2.allowed == 5
+
+    assert {:ok, true, n1} = Global.available?(n1)
+    assert n1.current == 5
+    assert n1.allowed == 5
+  end
+
+  @tag timeout: 120_000, integration: true
   property "preserves invariant" do
     check all limit <- unshrinkable(integer(0..50)),
               times <- unshrinkable(integer(100..1000)),

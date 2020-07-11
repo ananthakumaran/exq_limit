@@ -235,6 +235,7 @@ defmodule ExqLimit.Global do
            @clear,
            [
              state.version_key,
+             state.limit_key,
              state.allocation_key,
              state.heartbeat_key
            ],

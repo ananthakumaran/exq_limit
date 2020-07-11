@@ -23,13 +23,26 @@ defmodule ExqLimit.Global do
               interval: nil,
               cutoff_threshold: nil,
               last_synced: nil,
-              mode: :rebalance
+              mode: :rebalance,
+              version_key: nil,
+              limit_key: nil,
+              allocation_key: nil,
+              heartbeat_key: nil
   end
+
+  @version "limit_global_v1"
 
   @impl true
   def init(%{queue: queue}, options) do
     interval = Keyword.get(options, :interval, 20_000)
     missed_heartbeats_allowed = Keyword.get(options, :missed_heartbeats_allowed, 5)
+
+    namespace =
+      Keyword.get_lazy(options, :namespace, fn ->
+        Exq.Support.Config.get(:namespace)
+      end)
+
+    prefix = "#{namespace}:#{@version}:#{queue}:"
 
     state = %State{
       interval: interval,
@@ -44,7 +57,11 @@ defmodule ExqLimit.Global do
         Keyword.get_lazy(options, :node_id, fn ->
           Exq.Support.Config.node_identifier().node_id()
         end),
-      queue: queue
+      queue: queue,
+      version_key: prefix <> "version",
+      limit_key: prefix <> "limit",
+      allocation_key: prefix <> "allocation",
+      heartbeat_key: prefix <> "heartbeat"
     }
 
     state = sync(state)
@@ -79,41 +96,40 @@ defmodule ExqLimit.Global do
     if state.mode != :clear && state.last_synced && now - state.last_synced < state.interval do
       state
     else
-      prefix = "exq:exq_limit:#{state.queue}:"
       time = now / 1000
       state = %{state | last_synced: now}
 
       case state.mode do
         :clear ->
-          clear(state, prefix, time)
+          clear(state, time)
 
         :rebalance ->
-          rebalance(state, prefix, time)
+          rebalance(state, time)
 
         :drain ->
-          drain(state, prefix, time)
+          drain(state, time)
 
         :fill ->
-          fill(state, prefix, time)
+          fill(state, time)
 
         :heartbeat ->
-          heartbeat(state, prefix, time)
+          heartbeat(state, time)
       end
     end
   end
 
-  defp heartbeat(state, prefix, time) do
+  defp heartbeat(state, time) do
     case Script.eval!(
            state.redis,
            @heartbeat,
            [
-             prefix <> "version",
-             prefix <> "heartbeat"
+             state.version_key,
+             state.heartbeat_key
            ],
            [state.node_id, state.version, time, time - state.cutoff_threshold]
          ) do
       {:ok, 0} ->
-        rebalance(state, prefix, time)
+        rebalance(state, time)
 
       {:ok, 1} ->
         state
@@ -127,19 +143,19 @@ defmodule ExqLimit.Global do
     end
   end
 
-  defp fill(state, prefix, time) do
+  defp fill(state, time) do
     case Script.eval!(
            state.redis,
            @fill,
            [
-             prefix <> "version",
-             prefix <> "allocation",
-             prefix <> "heartbeat"
+             state.version_key,
+             state.allocation_key,
+             state.heartbeat_key
            ],
            [state.node_id, state.version, time, time - state.cutoff_threshold]
          ) do
       {:ok, 0} ->
-        rebalance(state, prefix, time)
+        rebalance(state, time)
 
       {:ok, [allowed, current]} ->
         %{state | allowed: allowed, current: current, mode: next_mode(allowed, current)}
@@ -150,24 +166,24 @@ defmodule ExqLimit.Global do
     end
   end
 
-  defp drain(state, prefix, time) do
+  defp drain(state, time) do
     amount = Enum.min([state.current - state.allowed, state.current - state.running])
 
     if amount == 0 do
-      heartbeat(state, prefix, time)
+      heartbeat(state, time)
     else
       case Script.eval!(
              state.redis,
              @drain,
              [
-               prefix <> "version",
-               prefix <> "allocation",
-               prefix <> "heartbeat"
+               state.version_key,
+               state.allocation_key,
+               state.heartbeat_key
              ],
              [state.node_id, state.version, time, time - state.cutoff_threshold, amount]
            ) do
         {:ok, 0} ->
-          rebalance(state, prefix, time)
+          rebalance(state, time)
 
         {:ok, 1} ->
           current = state.current - amount
@@ -183,15 +199,15 @@ defmodule ExqLimit.Global do
     end
   end
 
-  defp rebalance(state, prefix, time) do
+  defp rebalance(state, time) do
     case Script.eval!(
            state.redis,
            @rebalance,
            [
-             prefix <> "version",
-             prefix <> "limit",
-             prefix <> "allocation",
-             prefix <> "heartbeat"
+             state.version_key,
+             state.limit_key,
+             state.allocation_key,
+             state.heartbeat_key
            ],
            [state.node_id, state.limit, time, time - state.cutoff_threshold]
          ) do
@@ -213,14 +229,14 @@ defmodule ExqLimit.Global do
     end
   end
 
-  defp clear(state, prefix, _time) do
+  defp clear(state, _time) do
     case Script.eval!(
            state.redis,
            @clear,
            [
-             prefix <> "version",
-             prefix <> "allocation",
-             prefix <> "heartbeat"
+             state.version_key,
+             state.allocation_key,
+             state.heartbeat_key
            ],
            [state.node_id]
          ) do

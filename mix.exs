@@ -6,6 +6,7 @@ defmodule ExqLimit.MixProject do
       app: :exq_limit,
       version: "0.1.0",
       elixir: "~> 1.8",
+      description: "Exq Rate Limiter",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
@@ -14,7 +15,8 @@ defmodule ExqLimit.MixProject do
       docs: [
         main: "readme",
         extras: ["README.md"]
-      ]
+      ],
+      package: package()
     ]
   end
 
@@ -26,6 +28,14 @@ defmodule ExqLimit.MixProject do
       extra_applications: [:logger],
       mod: {ExqLimit.Application, []}
     ]
+  end
+
+  defp package do
+    %{
+      licenses: ["MIT"],
+      links: %{"Github" => "https://github.com/ananthakumaran/exq_limit"},
+      maintainers: ["ananthakumaran@gmail.com"]
+    }
   end
 
   defp deps do

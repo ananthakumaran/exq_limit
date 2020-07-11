@@ -113,35 +113,61 @@ defmodule ExqLimit.GlobalTest do
       # if any node misses heartbeat, most of the assertions made below
       # won't hold
 
+      invariant = fn state ->
+        assert length(state.available_nodes) <= state.limit
+
+        Enum.each(state.nodes, fn {_node_id, s} ->
+          assert s.current >= 0
+          assert s.allowed >= 0
+          assert s.running <= s.current
+        end)
+
+        total_running =
+          Map.values(state.running)
+          |> Enum.sum()
+
+        assert total_running <= limit
+
+        total_current =
+          Enum.map(state.nodes, fn {_, s} -> s.current end)
+          |> Enum.sum()
+
+        assert total_current <= limit
+      end
+
+      stable_invariant = fn state ->
+        assert length(state.available_nodes) <= state.limit
+
+        Enum.each(state.nodes, fn {_node_id, s} ->
+          assert s.current >= 0
+          assert s.allowed >= 0
+          assert s.running <= s.current
+        end)
+
+        total_running =
+          Map.values(state.running)
+          |> Enum.sum()
+
+        assert total_running <= limit
+
+        total_current =
+          Enum.map(state.nodes, fn {_, s} -> s.current end)
+          |> Enum.sum()
+
+        assert total_current == limit
+
+        total_allowed =
+          Enum.map(state.nodes, fn {_, s} -> s.allowed end)
+          |> Enum.sum()
+
+        assert total_allowed == limit
+      end
+
       NodeSimulator.run(
         ExqLimit.Global,
         %{all_nodes: all_nodes, limit: limit, times: times},
-        fn state ->
-          assert length(state.available_nodes) <= state.limit
-
-          Enum.each(state.nodes, fn {_node_id,
-                                     %Global.State{
-                                       current: current,
-                                       allowed: allowed,
-                                       running: running
-                                     }} ->
-            assert current >= 0
-            assert allowed >= 0
-            assert running <= current
-          end)
-
-          total_running =
-            Map.values(state.running)
-            |> Enum.sum()
-
-          assert total_running <= limit, inspect(state, label: "total running")
-
-          total_current =
-            Enum.map(state.nodes, fn {_, s} -> s.current end)
-            |> Enum.sum()
-
-          assert total_current <= limit, inspect(state, label: "total current")
-        end
+        invariant,
+        stable_invariant
       )
     end
   end

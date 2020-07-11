@@ -63,6 +63,22 @@ defmodule NodeSimulator do
     end)
   end
 
+  defp try_stablize_all_nodes(state, module) do
+    Process.sleep(50)
+
+    Enum.reduce(state.nodes, %{state | available_nodes: []}, fn {node_id, ns}, state ->
+      {:ok, _, ns} = trace_apply(module, :available?, [ns])
+      nodes = Map.put(state.nodes, node_id, ns)
+      %{state | nodes: nodes}
+    end)
+  end
+
+  def stabilize(state, module) do
+    try_stablize_all_nodes(state, module)
+    |> try_stablize_all_nodes(module)
+    |> try_stablize_all_nodes(module)
+  end
+
   def start_job(state, module) do
     state =
       Enum.reduce(state.nodes, %{state | available_nodes: []}, fn {node_id, ns}, state ->
@@ -143,13 +159,24 @@ defmodule NodeSimulator do
     |> Enum.random()
   end
 
-  def run(module, %{limit: limit, times: times, all_nodes: all_nodes}, invariant) do
+  def run(
+        module,
+        %{limit: limit, times: times, all_nodes: all_nodes},
+        invariant,
+        stable_invariant
+      ) do
     {:ok, "OK"} = Redix.command(TestRedis, ["FLUSHALL"])
 
     Enum.reduce(1..times, %State{all_nodes: all_nodes, limit: limit}, fn _, state ->
       command = select_random_command(next_command(state))
       state = apply(__MODULE__, command, [state, module])
-      invariant.(state)
+
+      if command == :stabilize do
+        stable_invariant.(state)
+      else
+        invariant.(state)
+      end
+
       state
     end)
   end
@@ -173,7 +200,8 @@ defmodule NodeSimulator do
       finish_job: finish_job,
       fail_job: fail_job,
       get_available: 5,
-      sleep: 5
+      sleep: 5,
+      stabilize: 1
     }
   end
 end

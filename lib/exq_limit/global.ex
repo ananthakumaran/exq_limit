@@ -1,4 +1,30 @@
 defmodule ExqLimit.Global do
+  @moduledoc """
+  Exq comes with concurrency control support per queue, but it's
+  limited to a single worker node. This module on the other hand
+  limits the concurrency globally across all the worker nodes. For
+  example, with a limit of 10, if there are two active worker nodes,
+  each will be allowed to work on 5 concurrent jobs. The limits per
+  worker node will get auto adjusted when new worker nodes get added
+  or existing ones get removed.
+
+  ### Options
+
+  - `limit` (integer) - Global max concurrency across all the worker nodes. Required field
+  - `node_id` (string) - Unique id of the worker node. Defaults to Exq node identifier.
+  - `interval` (integer - milliseconds) -  The availability of each node is determined by the last hearbeat. The interval controls how often the node registers the hearbeat. Defaults to 20_000.
+  - `missed_heartbeats_allowed` (integer) - Number of hearbeats a node is allowed to miss. After which, the node will be considered dead and its capacity will be redistributed to remaining worker nodes. Defaults to 5.
+
+  ### NOTES
+
+  This implementations tries to never run more than the configured
+  limit. But the limit could be crossed if a node could not
+  communicate with redis server, but able to continue with current
+  running jobs. In those cases, after certain time, the node will be
+  considered dead and its capacity will be shared across remaining
+  nodes.
+  """
+
   require Logger
   alias ExqLimit.Redis.Script
   require ExqLimit.Redis.Script
@@ -12,6 +38,8 @@ defmodule ExqLimit.Global do
   Script.compile(:clear)
 
   defmodule State do
+    @moduledoc false
+
     defstruct limit: nil,
               running: 0,
               allowed: 0,

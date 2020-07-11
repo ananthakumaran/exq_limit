@@ -1,4 +1,6 @@
 defmodule ExqLimit.Redis.Script do
+  @moduledoc false
+
   require Logger
 
   defmacro compile(name) do

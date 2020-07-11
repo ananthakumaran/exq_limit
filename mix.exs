@@ -8,7 +8,13 @@ defmodule ExqLimit.MixProject do
       elixir: "~> 1.8",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
-      deps: deps()
+      deps: deps(),
+      name: "ExqLimit",
+      source_url: "https://github.com/ananthakumaran/exq_limit",
+      docs: [
+        main: "readme",
+        extras: ["README.md"]
+      ]
     ]
   end
 
@@ -25,6 +31,7 @@ defmodule ExqLimit.MixProject do
   defp deps do
     [
       {:exq, github: "akira/exq", branch: "dequeue_controller"},
+      {:ex_doc, "~> 0.22", only: :dev, runtime: false},
       {:redix, ">= 0.9.0"},
       {:stream_data, "~> 0.5", only: [:test, :dev]}
     ]

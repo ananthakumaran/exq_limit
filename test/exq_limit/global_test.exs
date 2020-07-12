@@ -11,7 +11,7 @@ defmodule ExqLimit.GlobalTest do
 
   test "life cycle" do
     queue_info = %{queue: "hard"}
-    options = [limit: 10, interval: 50, missed_heartbeats_allowed: 5]
+    options = [limit: 10, interval: 50, missed_heartbeats_allowed: 5, redis: TestRedis]
     {:ok, n1} = Global.init(queue_info, options ++ [node_id: "n1"])
     assert n1.current == 10
     assert n1.allowed == 10

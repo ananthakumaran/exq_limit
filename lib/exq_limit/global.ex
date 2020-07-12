@@ -121,29 +121,38 @@ defmodule ExqLimit.Global do
   defp sync(state) do
     now = System.system_time(:millisecond)
 
-    if state.mode != :clear && state.last_synced && now - state.last_synced < state.interval do
-      state
-    else
-      time = now / 1000
-      state = %{state | last_synced: now}
+    state =
+      if state.mode != :clear && state.last_synced && now - state.last_synced < state.interval do
+        state
+      else
+        time = now / 1000
+        state = %{state | last_synced: now}
 
-      case state.mode do
-        :clear ->
-          clear(state, time)
+        case state.mode do
+          :clear ->
+            clear(state, time)
 
-        :rebalance ->
-          rebalance(state, time)
+          :rebalance ->
+            rebalance(state, time)
 
-        :drain ->
-          drain(state, time)
+          :drain ->
+            drain(state, time)
 
-        :fill ->
-          fill(state, time)
+          :fill ->
+            fill(state, time)
 
-        :heartbeat ->
-          heartbeat(state, time)
+          :heartbeat ->
+            heartbeat(state, time)
+        end
       end
-    end
+
+    :telemetry.execute(
+      [:exq_limit, :global],
+      %{running: state.running, quota: state.current},
+      %{queue: state.queue}
+    )
+
+    state
   end
 
   defp heartbeat(state, time) do

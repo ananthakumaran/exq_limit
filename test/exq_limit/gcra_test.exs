@@ -10,13 +10,16 @@ defmodule ExqLimit.GCRATest do
 
   test "rate" do
     jobs = run_for(5000, 3, rate: 10, period: 1, redis: TestRedis)
-    assert jobs == 50
+    assert jobs >= 50 && jobs <= 53
 
     jobs = run_for(5000, 5, rate: 10, period: 1, burst: 10, redis: TestRedis)
-    assert jobs == 60
+    assert jobs >= 60 && jobs <= 75
 
     jobs = run_for(3000, 1, rate: 10, period: 1, burst: 20, redis: TestRedis)
-    assert jobs == 50
+    assert jobs >= 50 && jobs <= 51
+
+    jobs = run_for(3000, 4, rate: 5, period: 1, redis: TestRedis, local: true)
+    assert jobs >= 60 && jobs <= 64
   end
 
   defp run_for(milliseconds, node_count, options) do
@@ -24,8 +27,8 @@ defmodule ExqLimit.GCRATest do
     queue_info = %{queue: "hard"}
 
     nodes =
-      Enum.map(1..node_count, fn _ ->
-        {:ok, state} = GCRA.init(queue_info, options)
+      Enum.map(1..node_count, fn id ->
+        {:ok, state} = GCRA.init(queue_info, options ++ [node_id: to_string(id)])
         state
       end)
 

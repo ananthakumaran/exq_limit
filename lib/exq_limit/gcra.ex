@@ -44,7 +44,7 @@ defmodule ExqLimit.GCRA do
     burst =
       case Keyword.get(options, :burst) do
         nil -> 1
-        burst when is_integer(burst) and burst > 0 -> burst + 1
+        burst when is_integer(burst) and burst >= 0 -> burst + 1
       end
 
     max_local_concurrency =
@@ -53,7 +53,17 @@ defmodule ExqLimit.GCRA do
         concurrency when is_integer(concurrency) and concurrency >= 0 -> concurrency
       end
 
-    prefix = "#{namespace}:#{@version}:#{queue}:"
+    prefix =
+      if Keyword.get(options, :local) do
+        node_id =
+          Keyword.get_lazy(options, :node_id, fn ->
+            Exq.Support.Config.node_identifier().node_id()
+          end)
+
+        "#{namespace}:#{@version}:#{queue}:#{node_id}:"
+      else
+        "#{namespace}:#{@version}:#{queue}:"
+      end
 
     state = %State{
       redis:

@@ -23,14 +23,19 @@ defmodule ExqLimit.Redis.Script do
   end
 
   def eval!(redis, {name, hash, source}, keys, args) do
-    Logger.debug(fn -> "eval script " <> inspect({name, keys, args}) end)
+    result =
+      case Redix.command(redis, ["EVALSHA", hash, length(keys)] ++ keys ++ args) do
+        {:error, %Redix.Error{message: "NOSCRIPT" <> _}} ->
+          Redix.command(redis, ["EVAL", source, length(keys)] ++ keys ++ args)
 
-    case Redix.command(redis, ["EVALSHA", hash, length(keys)] ++ keys ++ args) do
-      {:error, %Redix.Error{message: "NOSCRIPT" <> _}} ->
-        Redix.command(redis, ["EVAL", source, length(keys)] ++ keys ++ args)
+        result ->
+          result
+      end
 
-      result ->
-        result
-    end
+    Logger.debug(fn ->
+      "eval script " <> inspect({name, keys, args}) <> " --> " <> inspect(result)
+    end)
+
+    result
   end
 end

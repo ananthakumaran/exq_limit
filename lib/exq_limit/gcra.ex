@@ -19,8 +19,7 @@ defmodule ExqLimit.GCRA do
               tat_key: nil,
               last_synced: nil,
               reset_after: -1,
-              retry_after: 0,
-              max_local_concurrency: :infinity
+              retry_after: 0
   end
 
   @version "limit_gcra_v1"
@@ -47,12 +46,6 @@ defmodule ExqLimit.GCRA do
         burst when is_integer(burst) and burst >= 0 -> burst + 1
       end
 
-    max_local_concurrency =
-      case Keyword.get(options, :max_local_concurrency) do
-        nil -> :infinity
-        concurrency when is_integer(concurrency) and concurrency >= 0 -> concurrency
-      end
-
     prefix =
       if Keyword.get(options, :local) do
         node_id =
@@ -75,8 +68,7 @@ defmodule ExqLimit.GCRA do
       emission_interval: period / Keyword.fetch!(options, :rate),
       burst: burst,
       tat_key: prefix <> "tat",
-      last_synced: System.monotonic_time(:millisecond) / 1000,
-      max_local_concurrency: max_local_concurrency
+      last_synced: System.monotonic_time(:millisecond) / 1000
     }
 
     {:ok, state}
@@ -89,12 +81,8 @@ defmodule ExqLimit.GCRA do
 
   @impl true
   def available?(state) do
-    if state.running < state.max_local_concurrency do
-      state = sync(state)
-      {:ok, state.available?, state}
-    else
-      {:ok, false, state}
-    end
+    state = sync(state)
+    {:ok, state.available?, state}
   end
 
   @impl true

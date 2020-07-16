@@ -1,4 +1,36 @@
-defmodule ExqLimit.All do
+defmodule ExqLimit.And do
+  @moduledoc """
+  This module provides the ability to combiner multiple rate limiters
+  together.
+
+      {ExqLimit.And,
+        [
+          {ExqLimit.Local, limit: 20},
+          {ExqLimit.Global, limit: 100},
+          {ExqLimit.GCRA, [period: :second, rate: 60, burst: 0], short_circuit: true}
+        ]
+      }
+
+  The above example creates a rate limiter which dequeues new jobs
+  only if all the rate limiter returns true. This can be used to
+  create interesting combinations and also supports custom rate
+  limiters as long as it implements the `Exq.Dequeue.Behaviour`
+  behaviour
+
+  ### Options
+
+  - short_circuit (boolean) - whether to short circuit the `c:Exq.Dequeue.Behaviour.available?/1` call when any one of the previous rate limiters returned `false`. Defaults to `false`.
+
+  Some of the modules in ExqLimit expect specific value to be set for `short_circuit` option, otherwise the behaviour is undefined when used with `ExqLimit.And`
+
+  | module          | short_circuit   |
+  |-----------------|-----------------|
+  |`ExqLimit.Local` | `true or false` |
+  |`ExqLimit.Global`| `false`         |
+  |`ExqLimit.GCRA`  | `true`          |
+
+  """
+
   @behaviour Exq.Dequeue.Behaviour
 
   @impl true

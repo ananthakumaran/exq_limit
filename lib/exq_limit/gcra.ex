@@ -1,4 +1,35 @@
 defmodule ExqLimit.GCRA do
+  @moduledoc """
+  This module implements the
+  [GCRA](https://en.wikipedia.org/wiki/Generic_cell_rate_algorithm)
+  algorithm. Check the [blog post](https://brandur.org/rate-limiting)
+  by brandur for an excellent introduction.
+
+  ### Example
+
+      {ExqLimit.GCRA, period: :hour, rate: 60}
+
+  The above config can be used to run 60 jobs per hour. The algorithm
+  only allows jobs at regular interval, so if 10 jobs get enqueued at
+  once, each one will get processed at 1 minute interval.
+
+      {ExqLimit.GCRA, period: :hour, rate: 60, burst: 5}
+
+  `burst` option provides the ability to overshoot the limit for a
+  short period of time. It can be compared to a battery. With the
+  above config, when it's fully charged, it can process 5 jobs
+  immediatly, but from 6th job onwards, it will process jobs at 1
+  minute interval. The battery will get recharged 1 point every minute
+  and get maxed at 5.
+
+
+
+  ### Options
+  - `period` (atom | integer) - Can be either `:second`, `:minute`, `:hour`, `:day`. In case of integer, it will be consider as seconds. Required field.
+  - `burst` (integer) - Number of jobs allowed over the limit. Defaults to 0
+  - `local` (boolean) - if set to true, the rate limiting will apply to the local worker node. Otherwise, the rate limiting will apply to all worker nodes. Defaults to `false`.
+  - `node_id` (string) - Unique id of the worker node. Defaults to Exq node identifier. This will be used only if local option is set to true.
+  """
   require Logger
   alias ExqLimit.Redis.Script
   require ExqLimit.Redis.Script

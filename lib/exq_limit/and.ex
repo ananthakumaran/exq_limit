@@ -1,6 +1,6 @@
 defmodule ExqLimit.And do
   @moduledoc """
-  This module provides the ability to combiner multiple rate limiters
+  This module provides the ability to combine multiple rate limiters
   together.
 
       {ExqLimit.And,
@@ -21,7 +21,7 @@ defmodule ExqLimit.And do
 
   - short_circuit (boolean) - whether to short circuit the `c:Exq.Dequeue.Behaviour.available?/1` call when any one of the previous rate limiters returned `false`. Defaults to `false`.
 
-  Some of the modules in ExqLimit expect specific value to be set for `short_circuit` option, otherwise the behaviour is undefined when used with `ExqLimit.And`
+  Some of the modules in ExqLimit expect specific value to be set for `short_circuit` option, otherwise the behaviour is undefined when used with `ExqLimit.And`. Order is also important, those with `short_circuit: true` should be placed last.
 
   | module          | short_circuit   |
   |-----------------|-----------------|

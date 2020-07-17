@@ -29,6 +29,11 @@ defmodule ExqLimit.GCRA do
   - `burst` (integer) - Number of jobs allowed over the limit. Defaults to 0
   - `local` (boolean) - if set to true, the rate limiting will apply to the local worker node. Otherwise, the rate limiting will apply to all worker nodes. Defaults to `false`.
   - `node_id` (string) - Unique id of the worker node. Defaults to Exq node identifier. This will be used only if local option is set to true.
+
+
+  ### Credits
+
+  The lua script used in this module is a slightly modified version of [redis-gcra](https://github.com/rwz/redis-gcra)
   """
   require Logger
   alias ExqLimit.Redis.Script

@@ -18,19 +18,27 @@ defmodule ExqLimit.Local do
   defmodule State do
     @moduledoc false
 
-    defstruct limit: nil, current: 0
+    defstruct limit: nil, current: 0, queue: nil
   end
 
   @impl true
-  def init(_, options) do
-    {:ok, %State{limit: Keyword.fetch!(options, :limit)}}
+  def init(%{queue: queue}, options) do
+    {:ok, %State{limit: Keyword.fetch!(options, :limit), queue: queue}}
   end
 
   @impl true
   def stop(_), do: :ok
 
   @impl true
-  def available?(state), do: {:ok, state.current < state.limit, state}
+  def available?(state) do
+    :telemetry.execute(
+      [:exq_limit, :local],
+      %{running: state.current},
+      %{queue: state.queue}
+    )
+
+    {:ok, state.current < state.limit, state}
+  end
 
   @impl true
   def dispatched(state), do: {:ok, %{state | current: state.current + 1}}

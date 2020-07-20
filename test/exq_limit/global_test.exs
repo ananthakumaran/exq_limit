@@ -101,12 +101,12 @@ defmodule ExqLimit.GlobalTest do
     assert n1.allowed == 5
   end
 
-  @tag timeout: 120_000, integration: true
+  @tag integration: true
   property "preserves invariant" do
     check all limit <- unshrinkable(integer(0..50)),
               times <- unshrinkable(integer(100..1000)),
               nodes <- unshrinkable(integer(1..50)),
-              max_run_time: 60_000 do
+              max_run_time: 30_000 do
       all_nodes = Enum.map(1..nodes, &"node_#{&1}")
 
       # For simplicity, make sure none of the node misses heartbeat
@@ -114,7 +114,7 @@ defmodule ExqLimit.GlobalTest do
       # won't hold
 
       invariant = fn state ->
-        assert length(state.available_nodes) <= state.limit
+        assert length(state.available_nodes) <= limit
 
         Enum.each(state.nodes, fn {_node_id, s} ->
           assert s.current >= 0
@@ -136,7 +136,7 @@ defmodule ExqLimit.GlobalTest do
       end
 
       stable_invariant = fn state ->
-        assert length(state.available_nodes) <= state.limit
+        assert length(state.available_nodes) <= limit
 
         Enum.each(state.nodes, fn {_node_id, s} ->
           assert s.current >= 0
@@ -163,9 +163,17 @@ defmodule ExqLimit.GlobalTest do
         assert total_allowed == limit
       end
 
-      NodeSimulator.run(
+      NodeSimulator.Fuzzy.run(
         ExqLimit.Global,
-        %{all_nodes: all_nodes, limit: limit, times: times},
+        fn common ->
+          Keyword.merge(common,
+            redis: TestRedis,
+            limit: limit,
+            interval: 50,
+            missed_heartbeats_allowed: 20
+          )
+        end,
+        %{all_nodes: all_nodes, max_nodes: limit, times: times},
         invariant,
         stable_invariant
       )

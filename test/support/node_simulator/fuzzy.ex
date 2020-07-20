@@ -1,8 +1,13 @@
-defmodule NodeSimulator do
+defmodule NodeSimulator.Fuzzy do
   require Logger
 
   defmodule State do
-    defstruct all_nodes: [], nodes: %{}, limit: 0, available_nodes: [], running: %{}
+    defstruct all_nodes: [],
+              nodes: %{},
+              max_nodes: 0,
+              available_nodes: [],
+              running: %{},
+              limit_options: nil
   end
 
   defp unknown_node(%{nodes: nodes, all_nodes: all_nodes}),
@@ -23,13 +28,7 @@ defmodule NodeSimulator do
     {:ok, ns} =
       trace_apply(module, :init, [
         %{queue: "hard"},
-        [
-          node_id: node_id,
-          redis: TestRedis,
-          limit: state.limit,
-          interval: 50,
-          missed_heartbeats_allowed: 20
-        ]
+        state.limit_options.(node_id: node_id)
       ])
 
     %{state | nodes: Map.put(state.nodes, node_id, ns)}
@@ -161,42 +160,52 @@ defmodule NodeSimulator do
 
   def run(
         module,
-        %{limit: limit, times: times, all_nodes: all_nodes},
+        limit_options,
+        %{max_nodes: max_nodes, times: times, all_nodes: all_nodes},
         invariant,
         stable_invariant
       ) do
     {:ok, "OK"} = Redix.command(TestRedis, ["FLUSHALL"])
 
-    Enum.reduce(1..times, %State{all_nodes: all_nodes, limit: limit}, fn _, state ->
-      command = select_random_command(next_command(state))
-      state = apply(__MODULE__, command, [state, module])
+    Enum.reduce(
+      1..times,
+      %State{all_nodes: all_nodes, max_nodes: max_nodes, limit_options: limit_options},
+      fn _, state ->
+        command = select_random_command(next_command(state))
+        state = apply(__MODULE__, command, [state, module])
 
-      if command == :stabilize do
-        stable_invariant.(state)
-      else
-        invariant.(state)
+        if command == :stabilize do
+          stable_invariant.(state)
+        else
+          invariant.(state)
+        end
+
+        state
       end
-
-      state
-    end)
+    )
   end
 
   def next_command(%State{nodes: nodes}) when map_size(nodes) == 0 do
     %{start_node: 1}
   end
 
-  def next_command(%State{nodes: nodes, limit: limit, all_nodes: all_nodes, running: running}) do
+  def next_command(%State{
+        nodes: nodes,
+        max_nodes: max_nodes,
+        all_nodes: all_nodes,
+        running: running
+      }) do
     start_node =
-      if length(all_nodes) == map_size(nodes) || limit == map_size(nodes), do: 0, else: 3
+      if length(all_nodes) == map_size(nodes) || max_nodes == map_size(nodes), do: 0, else: 3
 
-    stop_node = if map_size(nodes) > 0, do: 3, else: 0
-    finish_job = if map_size(running) > 0, do: 5, else: 0
-    fail_job = if map_size(running) > 0, do: 5, else: 0
+    stop_node = if map_size(nodes) > 0, do: 2, else: 0
+    finish_job = if map_size(running) > 0, do: 3, else: 0
+    fail_job = if map_size(running) > 0, do: 3, else: 0
 
     %{
       start_node: start_node,
       stop_node: stop_node,
-      start_job: 5,
+      start_job: 10,
       finish_job: finish_job,
       fail_job: fail_job,
       get_available: 5,

@@ -13,7 +13,7 @@ defmodule ExqLimit.Global do
   - `limit` (integer) - Global max concurrency across all the worker nodes. Required field
   - `node_id` (string) - Unique id of the worker node. Defaults to Exq node identifier.
   - `interval` (integer - milliseconds) -  The availability of each node is determined by the last hearbeat. The interval controls how often the node registers the hearbeat. Defaults to 20_000.
-  - `missed_heartbeats_allowed` (integer) - Number of hearbeats a node is allowed to miss. After which, the node will be considered dead and its capacity will be redistributed to remaining worker nodes. Defaults to 5.
+  - `missed_heartbeats_allowed` (integer) - Number of hearbeats a node is allowed to miss. After which, the node will be considered dead and its capacity will be redistributed to remaining worker nodes. Defaults to 10.
 
   ### NOTES
 
@@ -63,7 +63,7 @@ defmodule ExqLimit.Global do
   @impl true
   def init(%{queue: queue}, options) do
     interval = Keyword.get(options, :interval, 20_000)
-    missed_heartbeats_allowed = Keyword.get(options, :missed_heartbeats_allowed, 5)
+    missed_heartbeats_allowed = Keyword.get(options, :missed_heartbeats_allowed, 10)
 
     namespace =
       Keyword.get_lazy(options, :namespace, fn ->

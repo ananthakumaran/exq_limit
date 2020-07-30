@@ -12,7 +12,7 @@ defmodule ExqLimit.And do
       }
 
   The above example creates a rate limiter which dequeues new jobs
-  only if all the rate limiter returns true. This can be used to
+  only if all the rate limiters return true. This can be used to
   create interesting combinations and also supports custom rate
   limiters as long as it implements the `Exq.Dequeue.Behaviour`
   behaviour

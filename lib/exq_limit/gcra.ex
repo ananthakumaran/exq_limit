@@ -162,7 +162,7 @@ defmodule ExqLimit.GCRA do
       {:ok, [limited, retry_after, reset_after]} ->
         {retry_after, ""} = Float.parse(retry_after)
         {reset_after, ""} = Float.parse(reset_after)
-        available? = if limited == 1, do: false, else: true
+        available? = limited != 1
 
         %{
           state

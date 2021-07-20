@@ -1,5 +1,10 @@
 # ExqLimit
 
+[![CI](https://github.com/ananthakumaran/exq_limit/actions/workflows/ci.yml/badge.svg)](<https://github.com/ananthakumaran/exq_limit/actions/workflows/ci.yml/badge.svg>)
+[![Hex.pm](https://img.shields.io/hexpm/v/exq_limit.svg)](<https://hex.pm/packages/exq_limit>)
+[![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](<https://hexdocs.pm/exq_limit/ExqLimit.Global.html>)
+[![License](https://img.shields.io/hexpm/l/exq_limit.svg)](<https://github.com/ananthakumaran/exq_limit/blob/master/LICENSE>)
+
 ExqLimit implements different types of rate limiting for
 [Exq](https://github.com/akira/exq) queue.
 

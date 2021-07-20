@@ -23,3 +23,6 @@ erl_crash.dump
 exq_limit-*.tar
 
 commands.txt
+*.cfg
+*.old
+*.tla

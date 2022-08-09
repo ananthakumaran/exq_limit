@@ -41,7 +41,7 @@ defmodule ExqLimit.MixProject do
   defp deps do
     [
       {:exq, "~> 0.15"},
-      {:telemetry, "~> 0.4"},
+      {:telemetry, "~> 0.4 or ~> 1.0"},
       {:ex_doc, "~> 0.22", only: :dev, runtime: false},
       {:redix, ">= 0.9.0"},
       {:stream_data, "~> 0.5", only: [:test, :dev]}

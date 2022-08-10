@@ -4,7 +4,7 @@ defmodule ExqLimit.MixProject do
   def project do
     [
       app: :exq_limit,
-      version: "0.1.2",
+      version: "0.1.3",
       elixir: "~> 1.8",
       description: "Exq Rate Limiter",
       start_permanent: Mix.env() == :prod,
